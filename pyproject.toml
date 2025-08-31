@@ -1,0 +1,6 @@
+[project]
+name = "dinner_recommender"
+version = "0.1.0"
+description = "CrewAI-based dinner recommender"
+authors = ["Harmeet Sokhi <your@email.com>"]
+readme = "README.md"
