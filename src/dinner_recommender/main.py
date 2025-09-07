@@ -55,6 +55,14 @@ input_parser = Agent(
 # Backstory: A seasoned chef with a global culinary background, known for innovative and delicious recipe concepts.
 
 
+def read_meal_names():
+    file_path = "final_meal_name.txt"
+    try:
+        with open(file_path, "r") as f:
+            return [line.strip() for line in f if line.strip()]
+    except FileNotFoundError:
+        return []
+
 recipe_brainstormer = Agent(
     role='Creative Recipe Brainstormer',
     goal='Always generate 3-5 diverse and appealing meal ideas based on the analyzed preferences, interpreting the previous task\'s output.',
@@ -65,9 +73,10 @@ recipe_brainstormer = Agent(
         "Whether the input is clear or vague, you can conjure up delicious, unique, and practical dinner ideas that inspire home cooks and delight every palate."
     ),
     verbose=True,
-    allow_delegation=False, # This agent can delegate if it needs further clarification or refinement
-    llm=llm # Assign the configured LLM
+    allow_delegation=False,
+    llm=llm
 )
+
 # Agent 3: Meal Planner and Instruction Provider
 # Role: Selects the best recipe and creates a simple, executable cooking plan.
 # Goal: To deliver one clear, actionable dinner suggestion with ingredients and instructions.
@@ -104,14 +113,16 @@ parse_and_correct_input_task = Task(
 
 # Task 1: Brainstorm recipe ideas based on analyzed preferences
 # This task is given to the 'recipe_brainstormer' agent.
-# It uses the output from 'analyze_preferences_task' (preferences_summary) to generate recipe ideas. 
+# It uses the output from 'parse_and_correct_input_task' to generate recipe ideas. 
 brainstorm_recipes_task = Task(
     description=(
         "Based on the inputs provided by the previous task, generate a few meal ideas. "
         "You must always produce a Python list of 3-5 dictionaries, each with keys: 'name', 'description', and 'tags', regardless of the quality or completeness of the input. "
-        "Interpret the input, infer missing details if necessary, and brainstorm 3-5 diverse and appealing dinner recipe ideas. "
+        f"Do NOT generate any meal idea whose name matches any of these previous meal names: {read_meal_names()}. "
+        "Interpret the input, infer missing details if necessary, and brainstorm 3-5 diverse and appealing dinner recipe ideas that are new and not previously suggested. "
         "For each idea, provide a catchy name, a brief description (1-2 sentences), and relevant tags (e.g., dietary, cuisine, time). "
         "If the input is empty, minimal, or malformed, use reasonable defaults or invent ideas, but always generate a valid output and never leave the output blank."
+        "Do NOT include any commentary, explanation, or status update. "
     ),
     expected_output="A Python list of 3-5 dictionaries, each with keys: 'name', 'description', and 'tags'.",
     agent=recipe_brainstormer,
@@ -158,9 +169,12 @@ with st.form("dinner_form"):
     ingredients_to_avoid = st.text_input("Ingredients to avoid (comma-separated, e.g., mushrooms):")
     submitted = st.form_submit_button("Get Dinner Suggestion")
 
+def is_valid_output(output):
+    return output and output.strip() != "[]" and output.strip() != ""
+
 if submitted:
-    # Each variable is just a text string
     with st.spinner("Planning your dinner..."):
+        # Run the crew with initial inputs
         result = dinner_crew.kickoff(inputs={
             'dietary': dietary,
             'cuisine': cuisine,
@@ -169,18 +183,84 @@ if submitted:
             'ingredients_to_avoid': ingredients_to_avoid
         })
 
+        # Retry logic for each task output (max 3 attempts)
+        max_attempts = 3
+
+        # Parsed & Corrected Input
+        parsed_output = str(parse_and_correct_input_task.output)
+        attempts = 1
+        while not is_valid_output(parsed_output) and attempts < max_attempts:
+            result = dinner_crew.kickoff(inputs={
+                'dietary': dietary,
+                'cuisine': cuisine,
+                'time': time,
+                'ingredients_to_use': ingredients_to_use,
+                'ingredients_to_avoid': ingredients_to_avoid
+            })
+            parsed_output = str(parse_and_correct_input_task.output)
+            attempts += 1
+
+        # Brainstormed Recipes
+        brainstormed_output = str(brainstorm_recipes_task.output)
+        attempts = 1
+        while not is_valid_output(brainstormed_output) and attempts < max_attempts:
+            result = dinner_crew.kickoff(inputs={
+                'dietary': dietary,
+                'cuisine': cuisine,
+                'time': time,
+                'ingredients_to_use': ingredients_to_use,
+                'ingredients_to_avoid': ingredients_to_avoid
+            })
+            brainstormed_output = str(brainstorm_recipes_task.output)
+            attempts += 1
+
+        # Selected Meal Suggestion
+        meal_suggestion_output = str(select_and_detail_meal_task.output)
+        attempts = 1
+        while not is_valid_output(meal_suggestion_output) and attempts < max_attempts:
+            result = dinner_crew.kickoff(inputs={
+                'dietary': dietary,
+                'cuisine': cuisine,
+                'time': time,
+                'ingredients_to_use': ingredients_to_use,
+                'ingredients_to_avoid': ingredients_to_avoid
+            })
+            meal_suggestion_output = str(select_and_detail_meal_task.output)
+            attempts += 1
+
     st.subheader("Parsed & Corrected Input")
-    parsed_output = str(parse_and_correct_input_task.output)
     st.code(parsed_output, language='python')
 
-    if not parsed_output or parsed_output.strip() == "[]":
+    if not is_valid_output(parsed_output):
         st.warning("No valid parsed input was generated. Please check your input and try again.")
     else:
         st.subheader("Brainstormed Recipes")
-        st.code(str(brainstorm_recipes_task.output), language='python')
+        st.code(brainstormed_output, language='python')
 
         st.subheader("Selected Meal Suggestion")
-        st.code(str(select_and_detail_meal_task.output), language='python')
+        st.code(meal_suggestion_output, language='python')
 
         st.markdown("## Here is your dinner suggestion for today!")
-        st.markdown(result)
+        st.markdown(meal_suggestion_output)
+
+        # --- Store the generated final meal name in a file, keeping only last 15 ---
+        import re
+        meal_name = None
+        match = re.search(r"Meal Suggestion\s*:\s*(.+)", meal_suggestion_output)
+        if match:
+            meal_name = match.group(1).strip()
+        else:
+            meal_name = meal_suggestion_output.strip()
+
+        # Read existing meal names, append new one, keep last 15
+        file_path = "final_meal_name.txt"
+        try:
+            with open(file_path, "r") as f:
+                lines = [line.strip() for line in f if line.strip()]
+        except FileNotFoundError:
+            lines = []
+        lines.append(meal_name)
+        lines = lines[-5:]
+        with open(file_path, "w") as f:
+            for line in lines:
+                f.write(line + "\n")
