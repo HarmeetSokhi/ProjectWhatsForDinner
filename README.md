@@ -4,22 +4,20 @@ A CrewAI-powered home app to help you decide what to cook for dinner, based on y
 
 ## Features
 
-- **Preference Analyst:** Interprets and summarizes your dietary needs and meal constraints.
-- **Recipe Brainstormer:** Suggests creative and diverse dinner ideas.
+- **Input Parser:** Corrects spelling and interprets ambiguous user input using NLP.
+- **Recipe Brainstormer:** Suggests creative and diverse dinner ideas, avoiding recent repeats.
 - **Meal Planner:** Selects the best recipe and provides a simple cooking plan with ingredients and instructions.
-
-## Project Structure
-- `src/` — Main logic and orchestration 
+ 
 
 ## Getting Started
 
 ### Prerequisites
 
 - Python 3.8+
-- [Ollama](https://ollama.com/) running locally (`ollama/llama3` model)
+- [Ollama](https://ollama.com/) running locally (`ollama/llama3` or `llama4`)
 - Install dependencies:
   ```bash
-  pip install crewai litellm python-dotenv
+  pip install crewai litellm python-dotenv streamlit
   ```
 
 ### Setup
@@ -30,29 +28,28 @@ A CrewAI-powered home app to help you decide what to cook for dinner, based on y
    ollama serve
    ollama pull llama3
    ```
+   *(Or use `llama4` if configured in your code.)*
 3. Copy `.env.example` to `.env` and configure as needed.
 
 ### Running the App
+
+#### Streamlit UI
+
+```bash
+streamlit run src/dinner_recommender/main.py
+```
+
+Fill in your dinner preferences in the web form. The app will analyze your input, brainstorm recipes (avoiding recent repeats), and provide a detailed dinner suggestion.
+
+#### CLI (if enabled)
 
 ```bash
 python src/dinner_recommender/main.py
 ```
 
-Answer the prompts about your dinner preferences. The app will analyze your input, brainstorm recipes, and provide a detailed dinner suggestion.
-
 ## Example Output
 
 ```
-Hello! I'm your AI Dinner Decider. Let's plan your meal.
-Please answer the following questions about your dinner preferences:
-Dietary preference (e.g., Vegetarian, Vegan, Gluten-Free, None): Vegetarian
-Cuisine preference (e.g., Italian, Mexican, Asian, Indian, None): Italian
-Desired cooking time (e.g., <30min, 30-60min, >60min): <30min
-Ingredients to use (comma-separated, e.g., pasta, spinach): pasta, spinach
-Ingredients to avoid (comma-separated, e.g., mushrooms): mushrooms
-
-Starting the dinner planning crew...
-
 ## Here is your dinner suggestion for today!
 Meal Suggestion: Speedy Spinach & Tomato Pasta
 Ingredients:
@@ -66,5 +63,7 @@ Instructions:
 2. Sauté garlic in olive oil, add spinach and tomatoes.
 3. Toss cooked pasta with veggies, season, and serve.
 ```
+
+
 
 
